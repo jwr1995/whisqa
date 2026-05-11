@@ -1,0 +1,62 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "whisqa"
+version = "0.1.0"
+description = "Whisper-based non-intrusive speech quality assessment"
+readme = "README.md"
+license = { file = "MIT License.md" }
+requires-python = ">=3.9"
+authors = [{ name = "George Close", email = "g.close@sheffield.ac.uk" }]
+keywords = ["speech", "quality", "assessment", "MOS", "whisper", "audio"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Multimedia :: Sound/Audio :: Analysis",
+]
+dependencies = [
+    "torch>=2.0",
+    "torchaudio>=2.0",
+    "transformers>=4.35",
+    "numpy>=1.24",
+    "soundfile>=0.12",
+]
+
+[project.scripts]
+whisqa = "whisqa.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/leto19/WhiSQA"
+Repository = "https://github.com/leto19/WhiSQA"
+
+[tool.hatch.build.targets.wheel]
+packages = ["whisqa"]
+# .pt files and mel_filters.npz live inside whisqa/_models/ and are
+# auto-included by hatchling. No force-include needed; if the stripped
+# checkpoints are absent the wheel builds but load_model() raises a
+# FileNotFoundError with instructions to run scripts/strip_whisper_weights.py.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: tests requiring real model checkpoints from HuggingFace Hub (slow, needs network)",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "whisqa/",
+    "tests/",
+    "scripts/",
+    "README.md",
+    "MIT License.md",
+    "pyproject.toml",
+]
