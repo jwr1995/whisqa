@@ -1,77 +1,83 @@
-from models.whisper_ni_predictors import whisperMetricPredictorEncoderLayersTransformerSmall, whisperMetricPredictorEncoderLayersTransformerSmalldim
+from models.whisper_ni_predictors import SingleHeadPredictor, MultiHeadPredictor
 import sys
-import torchaudio
 import argparse
 import torch
+import soundfile as sf
+import torchaudio.functional
 
-def get_score(audio_file: str, model_type: str) -> torch.Tensor:
+DIMENSIONS = ["MOS", "Noisiness", "Coloration", "Discontinuity", "Loudness"]
+
+
+def get_score(audio_file: str, model_type: str = "single") -> torch.Tensor:
     """
-    Get a score for a given audio file and print it. 
+    Predict speech quality score(s) for a mono 16 kHz WAV file.
 
     Args:
-        audio_file (str): Path to the audio file, must be 16K sample rate and mono. 
-        model_type (str): Single MOS (more accurate) or multidimensional [MOS, Noisiness, Coloration, Discontinuity and Loudness].
+        audio_file:  Path to the audio file. Must be mono; any sample rate is
+                     accepted (resampled to 16 kHz automatically).
+        model_type:  'single' → scalar MOS.
+                     'multi'  → [MOS, Noisiness, Coloration, Discontinuity, Loudness].
 
     Returns:
-        score (torch.Tensor): either MOS score or MOS + speech dimensions 
+        torch.Tensor: shape (1,) for 'single', (5,) for 'multi'. Values in [0, 1].
     """
-    if torch.cuda.is_available():
-        device = torch.device("cuda")
-    elif torch.backends.mps.is_available():
-         device = torch.device("mps") #for M1 Macs
-    else:
-        device = torch.device("cpu") #May be slow ! 
+    device = (
+        torch.device("cuda") if torch.cuda.is_available()
+        else torch.device("mps") if torch.backends.mps.is_available()
+        else torch.device("cpu")
+    )
 
     if model_type == "single":
-        model = whisperMetricPredictorEncoderLayersTransformerSmall()
-        model.load_state_dict(torch.load("checkpoints/single_head_model.pt",map_location=device))
+        model = SingleHeadPredictor()
+        model.load_state_dict(
+            torch.load("checkpoints/single_head_model.pt", map_location=device)
+        )
     elif model_type == "multi":
-        model = whisperMetricPredictorEncoderLayersTransformerSmalldim()
-        model.load_state_dict(torch.load("checkpoints/multi_head_model.pt",map_location=device))
+        model = MultiHeadPredictor()
+        model.load_state_dict(
+            torch.load("checkpoints/multi_head_model.pt", map_location=device)
+        )
     else:
-        raise ValueError("Model type not supported")
+        raise ValueError(f"Unknown model_type {model_type!r}. Choose 'single' or 'multi'.")
 
     model.eval()
     model.to(device)
-    waveform, sample_rate = torchaudio.load(audio_file)
 
-    #check channels
+    data, sample_rate = sf.read(audio_file, dtype="float32", always_2d=True)
+    waveform = torch.from_numpy(data.T)   # (channels, samples)
+
     if waveform.shape[0] != 1:
-        raise ValueError("Number of input channels must be 1")
+        raise ValueError(f"Audio must be mono (1 channel), got {waveform.shape[0]}.")
 
-    # Check sample rate
     if sample_rate != 16000:
-        raise ValueError("Sample rate must be 16000")
+        waveform = torchaudio.functional.resample(waveform, sample_rate, 16000)
 
     waveform = waveform.to(device)
-    score = model(waveform)
+    with torch.no_grad():
+        score = model(waveform)
+
     if model_type == "multi":
         score = score.squeeze(0)
-    return score 
+    return score
 
-    
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Get a score for a given audio file")
-    parser.add_argument("audio_file", type=str, help="Path to the audio file")
-    parser.add_argument("--model_type", type=str, help="Single headed MOS or multidimension [MOS,Noisiness, Coloration,Discontinuity and Loudness]", default="single")
+    parser = argparse.ArgumentParser(description="Predict speech quality scores for a WAV file.")
+    parser.add_argument("audio_file")
+    parser.add_argument(
+        "--model_type",
+        choices=["single", "multi"],
+        default="single",
+        help="'single' for MOS only, 'multi' for MOS + 4 P.835 dimensions.",
+    )
     args = parser.parse_args()
 
-
     score = get_score(args.audio_file, args.model_type)
-    print(score.shape)
+
     if args.model_type == "single":
-        print("MOS", score.item() * 5)
+        print(f"MOS: {score.item() * 5:.4f}")
     else:
-        mos = score[0].item() * 5
-        noisiness = score[1].item() * 5
-        coloration = score[2].item() * 5
-        discontinuity = score[3].item() * 5
-        loudness = score[4].item() * 5
-        print("MOS", mos)
-        print("Noisiness", noisiness)
-        print("Coloration", coloration)
-        print("Discontinuity", discontinuity)
-        print("Loudness", loudness)
+        for name, val in zip(DIMENSIONS, score):
+            print(f"{name}: {val.item() * 5:.4f}")
 
     sys.exit(0)
