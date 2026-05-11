@@ -40,11 +40,10 @@ Repository = "https://github.com/leto19/WhiSQA"
 
 [tool.hatch.build.targets.wheel]
 packages = ["whisqa"]
-
-[tool.hatch.build.targets.wheel.force-include]
-"whisqa/_models/mel_filters.npz"         = "whisqa/_models/mel_filters.npz"
-"whisqa/_models/single_head_model.pt"    = "whisqa/_models/single_head_model.pt"
-"whisqa/_models/multi_head_model.pt"     = "whisqa/_models/multi_head_model.pt"
+# .pt files and mel_filters.npz live inside whisqa/_models/ and are
+# auto-included by hatchling. No force-include needed; if the stripped
+# checkpoints are absent the wheel builds but load_model() raises a
+# FileNotFoundError with instructions to run scripts/strip_whisper_weights.py.
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
