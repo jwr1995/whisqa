@@ -1,5 +1,3 @@
-!THIS PROJECT IS STILL WIP - numerical stability is not yet there!
-
 # whisqa: a PyPi package for the WHiSQA Non-Intrusive Speech Quality Prediction Model
 
 This project is a fork of the original WhiSQA project repackaged for pypi.
