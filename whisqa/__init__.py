@@ -8,7 +8,7 @@ import soundfile as sf
 import torch
 import torchaudio.functional
 
-from whisqa._checkpoints import get_checkpoint_path
+from whisqa._checkpoints import get_checkpoint_stream
 from whisqa._models.predictors import MultiHeadPredictor, SingleHeadPredictor
 
 __version__ = "0.1.0"
@@ -50,8 +50,8 @@ def load_model(model_type: str = "single") -> torch.nn.Module:
         )
 
     device = _get_device()
-    checkpoint = get_checkpoint_path(model_type)
-    state_dict = torch.load(checkpoint, map_location=device, weights_only=True)
+    stream = get_checkpoint_stream(model_type)
+    state_dict = torch.load(stream, map_location=device, weights_only=True)
     # strict=False: Whisper encoder keys are absent in head-only checkpoints
     # and are already initialised from HuggingFace Hub above.
     model.load_state_dict(state_dict, strict=False)

@@ -8,32 +8,29 @@ distribution the encoder is unnecessary — it is downloaded from
 ``openai/whisper-small`` on HuggingFace Hub at model-load time anyway.
 
 This script keeps only the head weights, shrinking each checkpoint from
-~350 MB to a few MB.
+~350 MB to a few MB.  The output files live in ``whisqa/_models/`` and are
+bundled directly into the package wheel — no external model hosting required.
 
 Usage
 -----
 After pulling the full checkpoints via git-lfs::
 
-    python scripts/strip_whisper_weights.py \\
-        --input  checkpoints/single_head_model.pt \\
-        --output checkpoints/single_head_stripped.pt
+    git lfs pull
 
     python scripts/strip_whisper_weights.py \\
-        --input  checkpoints/multi_head_model.pt \\
-        --output checkpoints/multi_head_stripped.pt
+        --input checkpoints/single_head_model.pt
 
-The stripped files should then be uploaded to the ``leto19/whisqa``
-HuggingFace Hub model repository as ``single_head_model.pt`` and
-``multi_head_model.pt`` respectively.
+    python scripts/strip_whisper_weights.py \\
+        --input checkpoints/multi_head_model.pt
+
+Outputs are written to ``whisqa/_models/<filename>`` by default.
+Commit the resulting files; they are small enough for regular git.
 
 Loading
 -------
-The stripped checkpoints must be loaded with ``strict=False``::
-
-    model.load_state_dict(torch.load(path), strict=False)
-
-Missing Whisper encoder keys are expected and silently ignored; the encoder
-is already initialised from HuggingFace Hub in ``WhisperWrapper_encoder.__init__``.
+The stripped checkpoints are loaded with ``strict=False`` so that missing
+Whisper encoder keys are silently ignored — the encoder is initialised
+separately from ``openai/whisper-small`` on HuggingFace Hub.
 """
 import argparse
 from pathlib import Path
@@ -70,13 +67,19 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--input", type=Path, required=True, help="Full checkpoint .pt file")
-    parser.add_argument("--output", type=Path, required=True, help="Destination for stripped .pt file")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Destination for stripped .pt file (default: whisqa/_models/<input filename>)",
+    )
     args = parser.parse_args()
 
     if not args.input.exists():
         raise FileNotFoundError(f"Checkpoint not found: {args.input}")
 
-    strip(args.input, args.output)
+    output = args.output or (Path(__file__).parent.parent / "whisqa" / "_models" / args.input.name)
+    strip(args.input, output)
 
 
 if __name__ == "__main__":

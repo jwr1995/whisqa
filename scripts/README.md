@@ -21,24 +21,19 @@ Stripping reduces each file from ~350 MB to a few MB.
    git lfs pull
    ```
 
-2. Strip each checkpoint:
+2. Strip each checkpoint (outputs go to `whisqa/_models/` by default):
    ```
-   python scripts/strip_whisper_weights.py \
-       --input  checkpoints/single_head_model.pt \
-       --output checkpoints/single_head_stripped.pt
-
-   python scripts/strip_whisper_weights.py \
-       --input  checkpoints/multi_head_model.pt \
-       --output checkpoints/multi_head_stripped.pt
+   python scripts/strip_whisper_weights.py --input checkpoints/single_head_model.pt
+   python scripts/strip_whisper_weights.py --input checkpoints/multi_head_model.pt
    ```
 
-3. Upload the stripped files to the `leto19/whisqa` HuggingFace Hub repo
-   as `single_head_model.pt` and `multi_head_model.pt`:
+3. Commit the stripped files — they are a few MB so regular git is fine,
+   no LFS needed:
    ```
-   pip install huggingface_hub
-   huggingface-cli upload leto19/whisqa checkpoints/single_head_stripped.pt single_head_model.pt
-   huggingface-cli upload leto19/whisqa checkpoints/multi_head_stripped.pt  multi_head_model.pt
+   git add whisqa/_models/single_head_model.pt whisqa/_models/multi_head_model.pt
+   git commit -m "Add stripped head-only checkpoints"
    ```
 
-The stripped checkpoints are loaded with `strict=False` in the package so
-missing Whisper encoder keys are silently ignored.
+The stripped checkpoints are bundled into the wheel as package data and
+loaded at inference time with `strict=False` so missing Whisper encoder
+keys are silently ignored.

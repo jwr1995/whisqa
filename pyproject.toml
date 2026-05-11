@@ -28,7 +28,6 @@ dependencies = [
     "torchaudio>=2.0",
     "transformers>=4.35",
     "numpy>=1.24",
-    "huggingface_hub>=0.20",
     "soundfile>=0.12",
 ]
 
@@ -43,7 +42,9 @@ Repository = "https://github.com/leto19/WhiSQA"
 packages = ["whisqa"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"whisqa/_models/mel_filters.npz" = "whisqa/_models/mel_filters.npz"
+"whisqa/_models/mel_filters.npz"         = "whisqa/_models/mel_filters.npz"
+"whisqa/_models/single_head_model.pt"    = "whisqa/_models/single_head_model.pt"
+"whisqa/_models/multi_head_model.pt"     = "whisqa/_models/multi_head_model.pt"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
