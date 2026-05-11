@@ -1,4 +1,4 @@
-# WhiSQA: Non-Intrusive Speech Quality Prediction Using Whisper Encoder Features
+# whisqa: a PyPi package for the WHiSQA Non-Intrusive Speech Quality Prediction Model
 
 This project is a fork of the original WhiSQA project repackaged for pypi.
 
@@ -47,7 +47,7 @@ Input must be mono WAV. Any sample rate is accepted; audio is resampled to 16 kH
 
 ## Citation
 
-If you use WhiSQA in your work, please cite:
+If you use WhiSQA in your work, please cite the original authors:
 
 ```bibtex
 @inproceedings{close2025whisqa,
