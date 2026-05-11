@@ -31,6 +31,9 @@ dependencies = [
     "soundfile>=0.12",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest", "pytest-mock"]
+
 [project.scripts]
 whisqa = "whisqa.cli:main"
 
