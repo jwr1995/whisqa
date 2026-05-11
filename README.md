@@ -7,7 +7,7 @@ WhiSQA uses the frozen encoder of OpenAI's Whisper-small model as a feature extr
 ## Install
 
 ```bash
-pip install git+https://github.com/leto19/WhiSQA.git@pypi-package
+pip install whisqa
 ```
 
 ## Usage
