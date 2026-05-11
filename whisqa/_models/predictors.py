@@ -60,7 +60,7 @@ class SingleHeadPredictor(nn.Module):
         self.layer_weights = nn.Parameter(torch.ones(13))
         self.softmax = nn.Softmax(dim=0)
         self.transformer = TransformerWrapper(_encoder_config())
-        self.attn_pool = _PoolAttFF(256)
+        self.attenPool = _PoolAttFF(256)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x: Tensor) -> Tensor:
@@ -68,7 +68,7 @@ class SingleHeadPredictor(nn.Module):
         feats = feats @ self.softmax(self.layer_weights)
         feats = self.norm_input(feats.permute(0, 2, 1)).permute(0, 2, 1)
         out = self.transformer(feats)
-        return self.sigmoid(self.attn_pool(out))
+        return self.sigmoid(self.attenPool(out))
 
 
 class MultiHeadPredictor(nn.Module):
@@ -88,7 +88,11 @@ class MultiHeadPredictor(nn.Module):
         self.layer_weights = nn.Parameter(torch.ones(13))
         self.softmax = nn.Softmax(dim=0)
         self.transformer = TransformerWrapper(_encoder_config())
-        self.attn_pools = nn.ModuleList([_PoolAttFF(256) for _ in range(5)])
+        self.attenPool1 = _PoolAttFF(256)
+        self.attenPool2 = _PoolAttFF(256)
+        self.attenPool3 = _PoolAttFF(256)
+        self.attenPool4 = _PoolAttFF(256)
+        self.attenPool5 = _PoolAttFF(256)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x: Tensor) -> Tensor:
@@ -96,7 +100,9 @@ class MultiHeadPredictor(nn.Module):
         feats = feats @ self.softmax(self.layer_weights)
         feats = self.norm_input(feats.permute(0, 2, 1)).permute(0, 2, 1)
         out = self.transformer(feats)
-        scores = [self.sigmoid(pool(out)) for pool in self.attn_pools]
+        scores = [self.sigmoid(pool(out))
+                  for pool in [self.attenPool1, self.attenPool2,
+                               self.attenPool3, self.attenPool4, self.attenPool5]]
         return torch.stack(scores, dim=1)
 
 
