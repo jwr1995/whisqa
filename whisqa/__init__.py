@@ -27,11 +27,11 @@ def _get_device() -> torch.device:
 
 def load_model(model_type: str = "single") -> torch.nn.Module:
     """
-    Load a WhiSQA model with pre-trained head weights from HuggingFace Hub.
+    Load a WhiSQA model with pre-trained head weights.
 
-    The Whisper encoder is loaded from ``openai/whisper-small`` and the
-    lightweight prediction head is loaded from ``leto19/whisqa``.  Both are
-    cached locally after the first download.
+    The WhiSQA head weights are bundled with the package (no download needed).
+    The Whisper encoder (``openai/whisper-small``, ~240 MB) is downloaded from
+    HuggingFace Hub on the first call and cached in ``~/.cache/huggingface/``.
 
     Args:
         model_type: ``'single'`` for MOS-only, ``'multi'`` for MOS + four
@@ -73,8 +73,10 @@ def predict(
         audio_file:   Path to a WAV file. Must be mono; any sample rate is
                       accepted (audio is resampled to 16 kHz if needed).
         model_type:   ``'single'`` (MOS only) or ``'multi'`` (MOS + Noisiness,
-                      Coloration, Discontinuity, Loudness). Ignored if
-                      ``model`` is supplied.
+                      Coloration, Discontinuity, Loudness). Ignored when
+                      ``model`` is supplied — the supplied model's type takes
+                      precedence. A :class:`UserWarning` is emitted if the
+                      two conflict.
         warn_resample: Emit a :class:`UserWarning` when the file is not
                        16 kHz and will be resampled. Pass ``False`` to
                        suppress. Respects Python's :mod:`warnings` filters.
@@ -117,6 +119,18 @@ def predict(
 
     if model is None:
         model = load_model(model_type)
+    else:
+        # Infer actual type from the object; warn if caller also passed model_type
+        # with a value that contradicts the supplied model.
+        _actual = "multi" if isinstance(model, MultiHeadPredictor) else "single"
+        if model_type != "single" and model_type != _actual:
+            warnings.warn(
+                f"model_type={model_type!r} was supplied but the provided model is a "
+                f"{type(model).__name__} ({_actual!r}). model_type is ignored when "
+                "model= is given; the supplied model's type takes precedence.",
+                UserWarning,
+                stacklevel=2,
+            )
 
     # Infer model_type from the loaded model when one is supplied directly.
     _is_multi = isinstance(model, MultiHeadPredictor)

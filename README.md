@@ -37,6 +37,8 @@ whisqa speech.wav --model multi
 
 Input must be mono WAV. Any sample rate is accepted; audio is resampled to 16 kHz automatically.
 
+> **First-run note:** `load_model()` downloads `openai/whisper-small` (~240 MB) from HuggingFace Hub and caches it in `~/.cache/huggingface/`. The WhiSQA head weights ship inside the package and require no download.
+
 ## Results
 
 ![Results](results.png)

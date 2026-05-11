@@ -60,6 +60,16 @@ class TestPredictWithPreloadedModel:
         whisqa.predict(str(wav_16k), model=mock_single_model)
         spy.assert_not_called()
 
+    def test_no_warning_when_model_type_matches_model(self, wav_16k, mock_single_model):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            # model_type="single" matches the SingleHeadPredictor mock — no warning
+            whisqa.predict(str(wav_16k), model_type="single", model=mock_single_model)
+
+    def test_warns_when_model_type_conflicts_with_model(self, wav_16k, mock_single_model):
+        with pytest.warns(UserWarning, match="model_type="):
+            whisqa.predict(str(wav_16k), model_type="multi", model=mock_single_model)
+
 
 # ---------------------------------------------------------------------------
 # Resampling behaviour
