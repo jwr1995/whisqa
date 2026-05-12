@@ -70,27 +70,30 @@ class WhisperWrapper_encoder(nn.Module):
         layer=None,
         use_feat_extractor: bool = False,
         pretrained_model: Optional[str] = None,
+        dtype: torch.dtype = torch.bfloat16,
     ):
         super().__init__()
         self.use_feat_extractor = use_feat_extractor
         self.layer = layer
+        self.dtype = dtype
 
         if not use_feat_extractor:
             self.feature_extractor = WhisperFeatureExtractor.from_pretrained(
                 "openai/whisper-small"
             )
         model_name = pretrained_model or "openai/whisper-small"
-        self.model = WhisperModel.from_pretrained(model_name).encoder
+        self.model = WhisperModel.from_pretrained(model_name, torch_dtype=dtype).encoder
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
     def forward(self, data: torch.Tensor) -> torch.Tensor:
         if self.use_feat_extractor:
             data_padded = pad_or_trim(data, length=N_SAMPLES).to(self.device)
-            data_feats = log_mel_spectrogram(data_padded)
+            # STFT requires float32; cast to encoder dtype afterwards
+            data_feats = log_mel_spectrogram(data_padded).to(self.dtype)
         else:
             d_list = [d.to("cpu").tolist() for d in data]
             data = self.feature_extractor(d_list, sampling_rate=16000, return_tensors="pt")
-            data_feats = data.input_features.to(self.device)
+            data_feats = data.input_features.to(self.device).to(self.dtype)
 
         if self.layer is None:
             out = self.model(input_features=data_feats, return_dict=True)

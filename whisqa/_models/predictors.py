@@ -52,10 +52,10 @@ class SingleHeadPredictor(nn.Module):
     scalar MOS score in [0, 1] (multiply by 5 for the MOS scale).
     """
 
-    def __init__(self, feat_seq: int = 1500):
+    def __init__(self, feat_seq: int = 1500, dtype: torch.dtype = torch.bfloat16):
         super().__init__()
         self.norm_input = nn.BatchNorm1d(768)
-        self.feat_extract = WhisperWrapper_encoder(use_feat_extractor=True, layer=-1)
+        self.feat_extract = WhisperWrapper_encoder(use_feat_extractor=True, layer=-1, dtype=dtype)
         self.feat_extract.requires_grad_(False)
         self.layer_weights = nn.Parameter(torch.ones(13))
         self.softmax = nn.Softmax(dim=0)
@@ -66,7 +66,8 @@ class SingleHeadPredictor(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         feats = self.feat_extract(x)
         feats = feats @ self.softmax(self.layer_weights)
-        feats = self.norm_input(feats.permute(0, 2, 1)).permute(0, 2, 1)
+        # cast back to float32 for BatchNorm (does not support bfloat16 on all backends)
+        feats = self.norm_input(feats.float().permute(0, 2, 1)).permute(0, 2, 1)
         out = self.transformer(feats)
         return self.sigmoid(self.attenPool(out))
 
@@ -80,10 +81,10 @@ class MultiHeadPredictor(nn.Module):
     Multiply by 5 for the MOS scale.
     """
 
-    def __init__(self, feat_seq: int = 1500):
+    def __init__(self, feat_seq: int = 1500, dtype: torch.dtype = torch.bfloat16):
         super().__init__()
         self.norm_input = nn.BatchNorm1d(768)
-        self.feat_extract = WhisperWrapper_encoder(use_feat_extractor=True, layer=-1)
+        self.feat_extract = WhisperWrapper_encoder(use_feat_extractor=True, layer=-1, dtype=dtype)
         self.feat_extract.requires_grad_(False)
         self.layer_weights = nn.Parameter(torch.ones(13))
         self.softmax = nn.Softmax(dim=0)
@@ -98,7 +99,7 @@ class MultiHeadPredictor(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         feats = self.feat_extract(x)
         feats = feats @ self.softmax(self.layer_weights)
-        feats = self.norm_input(feats.permute(0, 2, 1)).permute(0, 2, 1)
+        feats = self.norm_input(feats.float().permute(0, 2, 1)).permute(0, 2, 1)
         out = self.transformer(feats)
         scores = [self.sigmoid(pool(out))
                   for pool in [self.attenPool1, self.attenPool2,

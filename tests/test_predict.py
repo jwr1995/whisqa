@@ -152,9 +152,14 @@ class TestArrayAndTensorInputs:
         result = whisqa.predict(audio, sample_rate=16000)
         assert "mos" in result
 
-    def test_missing_sample_rate_raises(self, patch_load_model_single):
-        with pytest.raises(ValueError, match="sample_rate must be provided"):
+    def test_missing_sample_rate_warns(self, patch_load_model_single):
+        with pytest.warns(UserWarning, match="sample_rate was not provided"):
             whisqa.predict(torch.zeros(16000))
+
+    def test_missing_sample_rate_assumes_16k(self, patch_load_model_single):
+        with pytest.warns(UserWarning):
+            result = whisqa.predict(torch.zeros(16000))
+        assert "mos" in result
 
     def test_wrong_ndim_raises(self, patch_load_model_single):
         with pytest.raises(ValueError, match="shape"):

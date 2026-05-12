@@ -42,9 +42,13 @@ def _load_audio(
         return torch.from_numpy(data.T), sr
 
     if sample_rate is None:
-        raise ValueError(
-            "sample_rate must be provided when audio is a numpy array or torch tensor."
+        warnings.warn(
+            "sample_rate was not provided for array/tensor input — assuming 16000 Hz. "
+            "Pass sample_rate explicitly to suppress this warning.",
+            UserWarning,
+            stacklevel=3,
         )
+        sample_rate = 16000
 
     if isinstance(audio, np.ndarray):
         audio = torch.from_numpy(np.asarray(audio, dtype=np.float32))
@@ -64,7 +68,10 @@ def _load_audio(
     return audio, sample_rate
 
 
-def load_model(model_type: str = "single") -> torch.nn.Module:
+def load_model(
+    model_type: str = "single",
+    dtype: torch.dtype = torch.bfloat16,
+) -> torch.nn.Module:
     """
     Load a WhiSQA model with pre-trained head weights.
 
@@ -75,14 +82,18 @@ def load_model(model_type: str = "single") -> torch.nn.Module:
     Args:
         model_type: ``'single'`` for MOS-only, ``'multi'`` for MOS + four
                     P.835 speech quality dimensions.
+        dtype:      Floating-point dtype for the Whisper encoder and head
+                    weights. Defaults to ``torch.bfloat16``, which halves
+                    memory usage with good numerical stability on modern
+                    hardware. Use ``torch.float32`` for maximum compatibility.
 
     Returns:
         An ``eval()``-mode model on the best available device.
     """
     if model_type == "single":
-        model = SingleHeadPredictor()
+        model = SingleHeadPredictor(dtype=dtype)
     elif model_type == "multi":
-        model = MultiHeadPredictor()
+        model = MultiHeadPredictor(dtype=dtype)
     else:
         raise ValueError(
             f"Unknown model type {model_type!r}. Choose 'single' or 'multi'."
@@ -93,7 +104,7 @@ def load_model(model_type: str = "single") -> torch.nn.Module:
     state_dict = torch.load(stream, map_location=device, weights_only=True)
     model.load_state_dict(state_dict, strict=False)
     model.eval()
-    model.to(device)
+    model.to(device).to(dtype)
     return model
 
 
@@ -209,9 +220,9 @@ class WhiSQA:
         results = scorer.predict_dir("/path/to/wavs")
     """
 
-    def __init__(self, model_type: str = "single"):
+    def __init__(self, model_type: str = "single", dtype: torch.dtype = torch.bfloat16):
         self.model_type = model_type
-        self._model = load_model(model_type)
+        self._model = load_model(model_type, dtype=dtype)
 
     def predict(
         self,
