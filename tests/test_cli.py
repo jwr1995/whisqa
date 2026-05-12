@@ -5,7 +5,6 @@ from unittest.mock import patch
 
 import pytest
 import torch
-from click.testing import CliRunner  # not used — using subprocess instead
 
 from whisqa.cli import main
 
