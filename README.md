@@ -8,14 +8,14 @@ WhiSQA is a non-intrusive MOS (ITU-T P.835) speech quality predictor.
 
 Original repo: https://github.com/leto19/WhiSQA
 
-## Improvements over the original
+## Improvements
 
 - **`pip install whisqa`** — fully installable package; no manual cloning or dependency wrangling.
 - **Bundled weights** — the frozen Whisper encoder weights (~350 MB per checkpoint) are stripped down to head-only files of 11 MB and 13 MB that ship inside the wheel. The [strip script](scripts/strip_whisper_weights.py) is kept in the repo for full reproducibility.
 - **Flexible input** — `predict()` accepts file paths, NumPy arrays, and Torch tensors, making it easy to integrate into existing pipelines without writing audio to disk.
 - **Auto-resampling** — any sample rate is accepted; audio is resampled to 16 kHz automatically with a suppressible warning.
 - **CLI** — score a file from the terminal with `whisqa speech.wav`.
-- **Clean API** — `predict()` and `load_model()` with type hints, docstrings, and 48 unit tests that run without model weights or network access.
+- **Simple API** — `predict()` and `load_model()` with type hints, docstrings, and unit tests.
 
 ## Install
 
