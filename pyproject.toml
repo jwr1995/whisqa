@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "whisqa"
-version = "0.1.0"
+version = "0.1.1"
 description = "Whisper-based non-intrusive speech quality assessment"
 readme = "README.md"
 license = { file = "MIT License.md" }
