@@ -5,6 +5,7 @@ Unit tests use mocked models and do not require network access or checkpoints.
 Integration tests (``pytest -m integration``) use real weights.
 """
 import warnings
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -176,6 +177,69 @@ class TestArrayAndTensorInputs:
         # Passing sample_rate alongside a file path should not raise
         result = whisqa.predict(str(wav_16k), sample_rate=99999)
         assert "mos" in result
+
+
+# ---------------------------------------------------------------------------
+# WhiSQA class
+# ---------------------------------------------------------------------------
+
+class TestWhiSQAClass:
+    def test_predict_returns_mos(self, wav_16k, mock_single_model, mocker):
+        mocker.patch("whisqa.load_model", return_value=mock_single_model)
+        scorer = whisqa.WhiSQA("single")
+        result = scorer.predict(str(wav_16k))
+        assert "mos" in result
+
+    def test_model_loaded_once(self, mocker):
+        spy = mocker.patch("whisqa.load_model", return_value=mocker.MagicMock(
+            spec=whisqa._models.predictors.SingleHeadPredictor,
+            **{"parameters.side_effect": lambda: iter([__import__("torch").tensor([0.0])]),
+               "return_value": __import__("torch").tensor([[0.6]])}
+        ))
+        whisqa.WhiSQA("single")
+        assert spy.call_count == 1
+
+    def test_predict_dir_returns_list(self, tmp_path, mock_single_model, mocker):
+        mocker.patch("whisqa.load_model", return_value=mock_single_model)
+        import numpy as np, soundfile as sf
+        for name in ("a.wav", "b.wav"):
+            sf.write(str(tmp_path / name), np.zeros(16000, dtype=np.float32), 16000)
+        scorer = whisqa.WhiSQA("single")
+        results = scorer.predict_dir(tmp_path)
+        assert len(results) == 2
+        assert all("file" in r and "mos" in r for r in results)
+
+    def test_predict_dir_file_key_is_absolute_path(self, tmp_path, mock_single_model, mocker):
+        mocker.patch("whisqa.load_model", return_value=mock_single_model)
+        import numpy as np, soundfile as sf
+        sf.write(str(tmp_path / "x.wav"), np.zeros(16000, dtype=np.float32), 16000)
+        scorer = whisqa.WhiSQA("single")
+        results = scorer.predict_dir(tmp_path)
+        assert Path(results[0]["file"]).is_absolute()
+
+    def test_predict_dir_recursive(self, tmp_path, mock_single_model, mocker):
+        mocker.patch("whisqa.load_model", return_value=mock_single_model)
+        import numpy as np, soundfile as sf
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        sf.write(str(tmp_path / "a.wav"), np.zeros(16000, dtype=np.float32), 16000)
+        sf.write(str(sub / "b.wav"), np.zeros(16000, dtype=np.float32), 16000)
+        scorer = whisqa.WhiSQA("single")
+        assert len(scorer.predict_dir(tmp_path, recursive=True)) == 2
+        assert len(scorer.predict_dir(tmp_path, recursive=False)) == 1
+
+    def test_predict_dir_not_a_directory_raises(self, wav_16k, mock_single_model, mocker):
+        mocker.patch("whisqa.load_model", return_value=mock_single_model)
+        scorer = whisqa.WhiSQA("single")
+        with pytest.raises(NotADirectoryError):
+            scorer.predict_dir(wav_16k)
+
+    def test_predict_dir_empty_warns(self, tmp_path, mock_single_model, mocker):
+        mocker.patch("whisqa.load_model", return_value=mock_single_model)
+        scorer = whisqa.WhiSQA("single")
+        with pytest.warns(UserWarning, match="No audio files found"):
+            results = scorer.predict_dir(tmp_path)
+        assert results == []
 
 
 # ---------------------------------------------------------------------------

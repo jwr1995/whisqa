@@ -1,9 +1,14 @@
 """
 Tests for the ``whisqa`` CLI entry point.
 """
-from unittest.mock import patch
+import sys
+from io import StringIO
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
+import soundfile as sf
 import torch
 
 from whisqa.cli import main
@@ -80,6 +85,68 @@ class TestCLIErrorHandling:
                 assert e.code != 0
             finally:
                 sys.argv = old_argv
+
+
+class TestCLIDirectoryMode:
+    def _make_audio_dir(self, tmp_path, n=3):
+        for i in range(n):
+            sf.write(str(tmp_path / f"file{i}.wav"), np.zeros(16000, dtype=np.float32), 16000)
+        return tmp_path
+
+    def _run_dir(self, args):
+        mock_results = [{"file": "/a/b.wav", "mos": 3.5}]
+        old_argv, sys.argv = sys.argv, ["whisqa"] + args
+        old_stdout, sys.stdout = sys.stdout, StringIO()
+        exit_code = 0
+        with patch("whisqa.WhiSQA") as MockScorer:
+            MockScorer.return_value.predict_dir.return_value = mock_results
+            try:
+                main()
+            except SystemExit as e:
+                exit_code = e.code or 0
+            finally:
+                output = sys.stdout.getvalue()
+                sys.argv = old_argv
+                sys.stdout = old_stdout
+        return exit_code, output, MockScorer
+
+    def test_directory_arg_uses_whisqa_class(self, tmp_path):
+        self._make_audio_dir(tmp_path)
+        code, _, MockScorer = self._run_dir([str(tmp_path)])
+        MockScorer.assert_called_once()
+
+    def test_directory_prints_filenames(self, tmp_path):
+        self._make_audio_dir(tmp_path)
+        _, output, _ = self._run_dir([str(tmp_path)])
+        assert "b.wav" in output
+
+    def test_directory_exit_zero_on_success(self, tmp_path):
+        self._make_audio_dir(tmp_path)
+        code, _, _ = self._run_dir([str(tmp_path)])
+        assert code == 0
+
+    def test_directory_csv_output(self, tmp_path):
+        self._make_audio_dir(tmp_path)
+        csv_path = tmp_path / "out.csv"
+        mock_results = [{"file": "/a/b.wav", "mos": 3.5}]
+        old_argv, sys.argv = sys.argv, ["whisqa", str(tmp_path), "--output", str(csv_path)]
+        with patch("whisqa.WhiSQA") as MockScorer:
+            MockScorer.return_value.predict_dir.return_value = mock_results
+            try:
+                main()
+            except SystemExit:
+                pass
+            finally:
+                sys.argv = old_argv
+        assert csv_path.exists()
+        assert "mos" in csv_path.read_text()
+
+    def test_no_recursive_flag_passed_through(self, tmp_path):
+        self._make_audio_dir(tmp_path)
+        _, _, MockScorer = self._run_dir([str(tmp_path), "--no-recursive"])
+        MockScorer.return_value.predict_dir.assert_called_once()
+        _, kwargs = MockScorer.return_value.predict_dir.call_args
+        assert kwargs.get("recursive") is False
 
 
 class TestCLIFlags:

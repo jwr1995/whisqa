@@ -1,9 +1,10 @@
 """WhiSQA: Whisper-based Speech Quality Assessment."""
 
 import os
+import sys
 import warnings
 from pathlib import Path
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 import numpy as np
 import soundfile as sf
@@ -13,10 +14,12 @@ import torchaudio.functional
 from whisqa._checkpoints import get_checkpoint_stream
 from whisqa._models.predictors import MultiHeadPredictor, SingleHeadPredictor
 
-__version__ = "0.1.4"
-__all__ = ["predict", "load_model"]
+__version__ = "0.1.5"
+__all__ = ["predict", "load_model", "WhiSQA"]
 
 _DIMENSIONS = ["mos", "noisiness", "coloration", "discontinuity", "loudness"]
+
+_AUDIO_EXTENSIONS = {".wav", ".flac", ".ogg", ".aiff", ".au"}
 
 AudioInput = Union[str, os.PathLike, np.ndarray, torch.Tensor]
 
@@ -36,7 +39,6 @@ def _load_audio(
     """Return ``(waveform, sample_rate)`` with waveform shape ``(1, samples)``."""
     if isinstance(audio, (str, os.PathLike)):
         data, sr = sf.read(audio, dtype="float32", always_2d=True)
-        # soundfile returns (samples, channels); transpose to (channels, samples)
         return torch.from_numpy(data.T), sr
 
     if sample_rate is None:
@@ -53,7 +55,7 @@ def _load_audio(
         )
 
     if audio.ndim == 1:
-        audio = audio.unsqueeze(0)  # (samples,) → (1, samples)
+        audio = audio.unsqueeze(0)
     elif audio.ndim != 2:
         raise ValueError(
             f"Audio tensor must be 1-D (samples,) or 2-D (1, samples); got shape {tuple(audio.shape)}."
@@ -89,8 +91,6 @@ def load_model(model_type: str = "single") -> torch.nn.Module:
     device = _get_device()
     stream = get_checkpoint_stream(model_type)
     state_dict = torch.load(stream, map_location=device, weights_only=True)
-    # strict=False: Whisper encoder keys are absent in head-only checkpoints
-    # and are already initialised from HuggingFace Hub above.
     model.load_state_dict(state_dict, strict=False)
     model.eval()
     model.to(device)
@@ -110,10 +110,9 @@ def predict(
     Args:
         audio:        Audio to score. Accepts:
 
-                      * **File path** (``str`` or :class:`pathlib.Path`) — WAV or
-                        any format supported by libsndfile. ``sample_rate`` is
-                        read from the file and the ``sample_rate`` argument is
-                        ignored.
+                      * **File path** (``str`` or :class:`pathlib.Path`) — any
+                        format supported by libsndfile. ``sample_rate`` is read
+                        from the file and the ``sample_rate`` argument is ignored.
                       * **NumPy array** — shape ``(samples,)`` or ``(1, samples)``,
                         float32. ``sample_rate`` must be provided.
                       * **Torch tensor** — shape ``(samples,)`` or ``(1, samples)``.
@@ -127,33 +126,18 @@ def predict(
                       ``model`` is supplied — the supplied model's type takes
                       precedence. A :class:`UserWarning` is emitted if the
                       two conflict.
-        sample_rate:  Sample rate of the audio in Hz. Required when ``audio``
-                      is a numpy array or torch tensor; ignored for file paths.
-        warn_resample: Emit a :class:`UserWarning` when the audio is not 16 kHz
-                       and will be resampled. Pass ``False`` to suppress.
-                       Respects Python's :mod:`warnings` filters.
-        model:        Pre-loaded model returned by :func:`load_model`. Pass
-                      this for efficient repeated inference to avoid
-                      re-loading weights on every call.
+        sample_rate:  Sample rate in Hz. Required for array/tensor inputs;
+                      ignored for file paths.
+        warn_resample: Emit a :class:`UserWarning` when audio is not 16 kHz.
+                       Pass ``False`` to suppress.
+        model:        Pre-loaded model from :func:`load_model`. Use
+                      :class:`WhiSQA` for repeated inference instead of
+                      managing the model object manually.
 
     Returns:
         ``dict`` with ``'mos'`` and (for ``model_type='multi'``) the four
         P.835 dimensions ``'noisiness'``, ``'coloration'``, ``'discontinuity'``,
         and ``'loudness'``. All values are on the MOS scale 1–5.
-
-    Examples::
-
-        >>> import whisqa
-        >>> whisqa.predict("speech.wav")
-        {'mos': 3.82}
-
-        >>> import numpy as np
-        >>> whisqa.predict(np.zeros(16000), sample_rate=16000)
-        {'mos': ...}
-
-        >>> import torch
-        >>> whisqa.predict(torch.zeros(1, 16000), sample_rate=16000)
-        {'mos': ...}
     """
     waveform, sr = _load_audio(audio, sample_rate)
 
@@ -186,7 +170,6 @@ def predict(
             )
 
     _is_multi = isinstance(model, MultiHeadPredictor)
-
     device = next(model.parameters()).device
     waveform = waveform.to(device)
 
@@ -198,3 +181,97 @@ def predict(
         return {dim: round(score[i].item() * 5, 4) for i, dim in enumerate(_DIMENSIONS)}
     else:
         return {"mos": round(score.item() * 5, 4)}
+
+
+class WhiSQA:
+    """
+    Stateful WhiSQA scorer that keeps the model in memory between calls.
+
+    Prefer this over calling :func:`predict` repeatedly when scoring multiple
+    files — the Whisper encoder is loaded once in ``__init__`` and reused
+    for every subsequent call.
+
+    Args:
+        model_type: ``'single'`` (MOS only) or ``'multi'`` (MOS + four
+                    P.835 dimensions). Passed to :func:`load_model`.
+
+    Example::
+
+        scorer = whisqa.WhiSQA("single")
+
+        # file path
+        scorer.predict("speech.wav")
+
+        # numpy / tensor
+        scorer.predict(waveform, sample_rate=16000)
+
+        # whole directory
+        results = scorer.predict_dir("/path/to/wavs")
+    """
+
+    def __init__(self, model_type: str = "single"):
+        self.model_type = model_type
+        self._model = load_model(model_type)
+
+    def predict(
+        self,
+        audio: AudioInput,
+        sample_rate: Optional[int] = None,
+        warn_resample: bool = True,
+    ) -> dict:
+        """Score a single audio signal. See :func:`predict` for argument details."""
+        return predict(
+            audio,
+            sample_rate=sample_rate,
+            warn_resample=warn_resample,
+            model=self._model,
+        )
+
+    def predict_dir(
+        self,
+        directory: Union[str, Path],
+        recursive: bool = True,
+        warn_resample: bool = True,
+    ) -> List[dict]:
+        """
+        Score every audio file in *directory*.
+
+        Supported extensions: ``wav``, ``flac``, ``ogg``, ``aiff``, ``au``.
+        Files that cannot be scored are skipped with a warning to stderr.
+
+        Args:
+            directory:    Path to a directory.
+            recursive:    If ``True`` (default), search sub-directories too.
+            warn_resample: Passed through to :meth:`predict` for each file.
+
+        Returns:
+            List of result dicts, each with an extra ``'file'`` key containing
+            the absolute path string, in the order files were discovered.
+        """
+        directory = Path(directory)
+        if not directory.is_dir():
+            raise NotADirectoryError(f"{directory} is not a directory.")
+
+        pattern = "**/*" if recursive else "*"
+        files = sorted(
+            p for p in directory.glob(pattern)
+            if p.is_file() and p.suffix.lower() in _AUDIO_EXTENSIONS
+        )
+
+        if not files:
+            warnings.warn(
+                f"No audio files found in {directory}.",
+                UserWarning,
+                stacklevel=2,
+            )
+            return []
+
+        results = []
+        for f in files:
+            try:
+                scores = self.predict(f, warn_resample=warn_resample)
+                results.append({"file": str(f), **scores})
+            except Exception as exc:
+                print(f"Warning: skipping {f.name} — {exc}", file=sys.stderr)
+
+        return results
