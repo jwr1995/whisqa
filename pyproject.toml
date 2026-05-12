@@ -9,7 +9,11 @@ description = "Whisper-based non-intrusive speech quality assessment"
 readme = "README.md"
 license = { file = "MIT License.md" }
 requires-python = ">=3.9"
-authors = [{ name = "William Ravenscroft", email = "jwravenscroft@gmail.com" }]
+authors = [
+    { name = "William Ravenscroft" },
+    { name = "George Close" },
+]
+maintainers = [{ name = "William Ravenscroft", email = "jwravenscroft@gmail.com" }]
 keywords = ["speech", "quality", "assessment", "MOS", "whisper", "audio"]
 classifiers = [
     "Development Status :: 3 - Alpha",
