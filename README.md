@@ -1,8 +1,10 @@
-# WhiSQA: Non-Intrusive Speech Quality Prediction Using Whisper Encoder Features
+# whisqa: a PyPi package for the WHiSQA Non-Intrusive Speech Quality Prediction Model
 
-[![arXiv](https://img.shields.io/badge/arXiv-2508.02210-b31b1b.svg)](https://arxiv.org/abs/2508.02210)
+This project is a fork of the original WhiSQA project repackaged for pypi.
 
 WhiSQA uses the frozen encoder of OpenAI's Whisper-small model as a feature extractor, adds a lightweight trainable transformer head, and predicts ITU-T P.835 speech quality dimensions without requiring a clean reference signal.
+
+Original repo: https://github.com/leto19/WhiSQA
 
 ## Install
 
@@ -45,7 +47,7 @@ Input must be mono WAV. Any sample rate is accepted; audio is resampled to 16 kH
 
 ## Citation
 
-If you use WhiSQA in your work, please cite:
+If you use WhiSQA in your work, please cite the original authors:
 
 ```bibtex
 @inproceedings{close2025whisqa,
@@ -62,3 +64,4 @@ If you use WhiSQA in your work, please cite:
   doi       = {10.1007/978-3-032-07956-5_3},
 }
 ```
+[![arXiv](https://img.shields.io/badge/arXiv-2508.02210-b31b1b.svg)](https://arxiv.org/abs/2508.02210)
