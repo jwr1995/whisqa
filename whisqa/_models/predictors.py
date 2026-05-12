@@ -64,10 +64,11 @@ class SingleHeadPredictor(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x: Tensor) -> Tensor:
-        feats = self.feat_extract(x)
+        # Encoder runs in its dtype (default bfloat16); cast to float32
+        # immediately so the float32 head (BatchNorm, transformer) is consistent.
+        feats = self.feat_extract(x).float()
         feats = feats @ self.softmax(self.layer_weights)
-        # cast back to float32 for BatchNorm (does not support bfloat16 on all backends)
-        feats = self.norm_input(feats.float().permute(0, 2, 1)).permute(0, 2, 1)
+        feats = self.norm_input(feats.permute(0, 2, 1)).permute(0, 2, 1)
         out = self.transformer(feats)
         return self.sigmoid(self.attenPool(out))
 
@@ -97,9 +98,9 @@ class MultiHeadPredictor(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x: Tensor) -> Tensor:
-        feats = self.feat_extract(x)
+        feats = self.feat_extract(x).float()
         feats = feats @ self.softmax(self.layer_weights)
-        feats = self.norm_input(feats.float().permute(0, 2, 1)).permute(0, 2, 1)
+        feats = self.norm_input(feats.permute(0, 2, 1)).permute(0, 2, 1)
         out = self.transformer(feats)
         scores = [self.sigmoid(pool(out))
                   for pool in [self.attenPool1, self.attenPool2,

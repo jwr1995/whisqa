@@ -104,7 +104,10 @@ def load_model(
     state_dict = torch.load(stream, map_location=device, weights_only=True)
     model.load_state_dict(state_dict, strict=False)
     model.eval()
-    model.to(device).to(dtype)
+    model.to(device)
+    # Apply dtype only to the encoder — it dominates memory and compute.
+    # The head stays float32 to avoid BatchNorm dtype issues on CPU.
+    model.feat_extract.to(dtype)
     return model
 
 
