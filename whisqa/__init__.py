@@ -1,7 +1,9 @@
 """WhiSQA: Whisper-based Speech Quality Assessment."""
 
+import os
 import warnings
-from typing import Optional
+from pathlib import Path
+from typing import Optional, Union
 
 import numpy as np
 import soundfile as sf
@@ -16,6 +18,8 @@ __all__ = ["predict", "load_model"]
 
 _DIMENSIONS = ["mos", "noisiness", "coloration", "discontinuity", "loudness"]
 
+AudioInput = Union[str, os.PathLike, np.ndarray, torch.Tensor]
+
 
 def _get_device() -> torch.device:
     if torch.cuda.is_available():
@@ -23,6 +27,39 @@ def _get_device() -> torch.device:
     if torch.backends.mps.is_available():
         return torch.device("mps")
     return torch.device("cpu")
+
+
+def _load_audio(
+    audio: AudioInput,
+    sample_rate: Optional[int],
+) -> tuple:
+    """Return ``(waveform, sample_rate)`` with waveform shape ``(1, samples)``."""
+    if isinstance(audio, (str, os.PathLike)):
+        data, sr = sf.read(audio, dtype="float32", always_2d=True)
+        # soundfile returns (samples, channels); transpose to (channels, samples)
+        return torch.from_numpy(data.T), sr
+
+    if sample_rate is None:
+        raise ValueError(
+            "sample_rate must be provided when audio is a numpy array or torch tensor."
+        )
+
+    if isinstance(audio, np.ndarray):
+        audio = torch.from_numpy(np.asarray(audio, dtype=np.float32))
+
+    if not isinstance(audio, torch.Tensor):
+        raise TypeError(
+            f"audio must be a file path, numpy array, or torch tensor; got {type(audio).__name__}."
+        )
+
+    if audio.ndim == 1:
+        audio = audio.unsqueeze(0)  # (samples,) → (1, samples)
+    elif audio.ndim != 2:
+        raise ValueError(
+            f"Audio tensor must be 1-D (samples,) or 2-D (1, samples); got shape {tuple(audio.shape)}."
+        )
+
+    return audio, sample_rate
 
 
 def load_model(model_type: str = "single") -> torch.nn.Module:
@@ -61,25 +98,40 @@ def load_model(model_type: str = "single") -> torch.nn.Module:
 
 
 def predict(
-    audio_file: str,
+    audio: AudioInput,
     model_type: str = "single",
+    sample_rate: Optional[int] = None,
     warn_resample: bool = True,
     model: Optional[torch.nn.Module] = None,
 ) -> dict:
     """
-    Predict speech quality scores for an audio file.
+    Predict speech quality scores for an audio signal.
 
     Args:
-        audio_file:   Path to a WAV file. Must be mono; any sample rate is
-                      accepted (audio is resampled to 16 kHz if needed).
+        audio:        Audio to score. Accepts:
+
+                      * **File path** (``str`` or :class:`pathlib.Path`) — WAV or
+                        any format supported by libsndfile. ``sample_rate`` is
+                        read from the file and the ``sample_rate`` argument is
+                        ignored.
+                      * **NumPy array** — shape ``(samples,)`` or ``(1, samples)``,
+                        float32. ``sample_rate`` must be provided.
+                      * **Torch tensor** — shape ``(samples,)`` or ``(1, samples)``.
+                        ``sample_rate`` must be provided.
+
+                      All inputs must be mono. Any sample rate is accepted;
+                      audio is resampled to 16 kHz automatically if needed.
+
         model_type:   ``'single'`` (MOS only) or ``'multi'`` (MOS + Noisiness,
                       Coloration, Discontinuity, Loudness). Ignored when
                       ``model`` is supplied — the supplied model's type takes
                       precedence. A :class:`UserWarning` is emitted if the
                       two conflict.
-        warn_resample: Emit a :class:`UserWarning` when the file is not
-                       16 kHz and will be resampled. Pass ``False`` to
-                       suppress. Respects Python's :mod:`warnings` filters.
+        sample_rate:  Sample rate of the audio in Hz. Required when ``audio``
+                      is a numpy array or torch tensor; ignored for file paths.
+        warn_resample: Emit a :class:`UserWarning` when the audio is not 16 kHz
+                       and will be resampled. Pass ``False`` to suppress.
+                       Respects Python's :mod:`warnings` filters.
         model:        Pre-loaded model returned by :func:`load_model`. Pass
                       this for efficient repeated inference to avoid
                       re-loading weights on every call.
@@ -89,39 +141,40 @@ def predict(
         P.835 dimensions ``'noisiness'``, ``'coloration'``, ``'discontinuity'``,
         and ``'loudness'``. All values are on the MOS scale 1–5.
 
-    Example::
+    Examples::
 
         >>> import whisqa
         >>> whisqa.predict("speech.wav")
         {'mos': 3.82}
-        >>> m = whisqa.load_model("multi")
-        >>> whisqa.predict("speech.wav", model_type="multi", model=m)
-        {'mos': 3.82, 'noisiness': 4.1, 'coloration': 3.6, ...}
+
+        >>> import numpy as np
+        >>> whisqa.predict(np.zeros(16000), sample_rate=16000)
+        {'mos': ...}
+
+        >>> import torch
+        >>> whisqa.predict(torch.zeros(1, 16000), sample_rate=16000)
+        {'mos': ...}
     """
-    data, sample_rate = sf.read(audio_file, dtype="float32", always_2d=True)
-    # soundfile returns (samples, channels); convert to (channels, samples)
-    waveform = torch.from_numpy(data.T)
+    waveform, sr = _load_audio(audio, sample_rate)
 
     if waveform.shape[0] != 1:
         raise ValueError(
             f"Audio must be mono (1 channel), got {waveform.shape[0]} channels."
         )
 
-    if sample_rate != 16000:
+    if sr != 16000:
         if warn_resample:
             warnings.warn(
-                f"Input sample rate is {sample_rate} Hz; resampling to 16000 Hz. "
+                f"Input sample rate is {sr} Hz; resampling to 16000 Hz. "
                 "Pass warn_resample=False to suppress this warning.",
                 UserWarning,
                 stacklevel=2,
             )
-        waveform = torchaudio.functional.resample(waveform, sample_rate, 16000)
+        waveform = torchaudio.functional.resample(waveform, sr, 16000)
 
     if model is None:
         model = load_model(model_type)
     else:
-        # Infer actual type from the object; warn if caller also passed model_type
-        # with a value that contradicts the supplied model.
         _actual = "multi" if isinstance(model, MultiHeadPredictor) else "single"
         if model_type != "single" and model_type != _actual:
             warnings.warn(
@@ -132,7 +185,6 @@ def predict(
                 stacklevel=2,
             )
 
-    # Infer model_type from the loaded model when one is supplied directly.
     _is_multi = isinstance(model, MultiHeadPredictor)
 
     device = next(model.parameters()).device

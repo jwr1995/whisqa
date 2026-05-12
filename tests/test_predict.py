@@ -6,6 +6,7 @@ Integration tests (``pytest -m integration``) use real weights.
 """
 import warnings
 
+import numpy as np
 import pytest
 import torch
 
@@ -116,6 +117,65 @@ class TestInputValidation:
     def test_unknown_model_type_raises(self, wav_16k):
         with pytest.raises(ValueError, match="Unknown model type"):
             whisqa.predict(str(wav_16k), model_type="banana")
+
+
+# ---------------------------------------------------------------------------
+# Array and tensor inputs
+# ---------------------------------------------------------------------------
+
+class TestArrayAndTensorInputs:
+    """predict() should accept numpy arrays and torch tensors directly."""
+
+    def test_torch_1d_accepted(self, patch_load_model_single):
+        audio = torch.zeros(16000)
+        result = whisqa.predict(audio, sample_rate=16000)
+        assert "mos" in result
+
+    def test_torch_2d_accepted(self, patch_load_model_single):
+        audio = torch.zeros(1, 16000)
+        result = whisqa.predict(audio, sample_rate=16000)
+        assert "mos" in result
+
+    def test_numpy_1d_accepted(self, patch_load_model_single):
+        audio = np.zeros(16000, dtype=np.float32)
+        result = whisqa.predict(audio, sample_rate=16000)
+        assert "mos" in result
+
+    def test_numpy_2d_accepted(self, patch_load_model_single):
+        audio = np.zeros((1, 16000), dtype=np.float32)
+        result = whisqa.predict(audio, sample_rate=16000)
+        assert "mos" in result
+
+    def test_numpy_float64_converted(self, patch_load_model_single):
+        audio = np.zeros(16000, dtype=np.float64)
+        result = whisqa.predict(audio, sample_rate=16000)
+        assert "mos" in result
+
+    def test_missing_sample_rate_raises(self, patch_load_model_single):
+        with pytest.raises(ValueError, match="sample_rate must be provided"):
+            whisqa.predict(torch.zeros(16000))
+
+    def test_wrong_ndim_raises(self, patch_load_model_single):
+        with pytest.raises(ValueError, match="shape"):
+            whisqa.predict(torch.zeros(2, 1, 16000), sample_rate=16000)
+
+    def test_stereo_tensor_raises(self, patch_load_model_single):
+        with pytest.raises(ValueError, match="mono"):
+            whisqa.predict(torch.zeros(2, 16000), sample_rate=16000)
+
+    def test_wrong_type_raises(self, patch_load_model_single):
+        with pytest.raises(TypeError, match="file path"):
+            whisqa.predict([0.0] * 16000, sample_rate=16000)
+
+    def test_tensor_resampled_when_not_16k(self, patch_load_model_single):
+        audio = torch.zeros(8000)
+        with pytest.warns(UserWarning, match="resampling"):
+            whisqa.predict(audio, sample_rate=8000)
+
+    def test_sample_rate_ignored_for_file_path(self, wav_16k, patch_load_model_single):
+        # Passing sample_rate alongside a file path should not raise
+        result = whisqa.predict(str(wav_16k), sample_rate=99999)
+        assert "mos" in result
 
 
 # ---------------------------------------------------------------------------
