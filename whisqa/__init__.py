@@ -13,7 +13,7 @@ import torchaudio.functional
 from whisqa._checkpoints import get_checkpoint_stream
 from whisqa._models.predictors import MultiHeadPredictor, SingleHeadPredictor
 
-__version__ = "0.1.2"
+__version__ = "0.1.0"
 __all__ = ["predict", "load_model"]
 
 _DIMENSIONS = ["mos", "noisiness", "coloration", "discontinuity", "loudness"]

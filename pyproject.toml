@@ -4,12 +4,15 @@ build-backend = "hatchling.build"
 
 [project]
 name = "whisqa"
-version = "0.1.2"
+version = "0.1.0"
 description = "Whisper-based non-intrusive speech quality assessment"
 readme = "README.md"
 license = { file = "MIT License.md" }
 requires-python = ">=3.9"
-authors = [{ name = "George Close", email = "g.close@sheffield.ac.uk" }]
+authors = [
+    { name = "George Close" },
+    { name = "William Ravenscroft", email = "jwravenscroft@gmail.com" },
+]
 keywords = ["speech", "quality", "assessment", "MOS", "whisper", "audio"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -38,8 +41,8 @@ dev = ["pytest", "pytest-mock"]
 whisqa = "whisqa.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/leto19/WhiSQA"
-Repository = "https://github.com/leto19/WhiSQA"
+Homepage = "https://github.com/jwr1995/whisqa"
+Repository = "https://github.com/jwr1995/whisqa"
 
 [tool.hatch.build.targets.wheel]
 packages = ["whisqa"]
